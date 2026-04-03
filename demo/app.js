@@ -43,8 +43,18 @@ const ANCHOR_PATTERNS = [
   /\bdefined\s+as\b/,
   /\b(swedish|french|arabic)\s+means\b/,
   /\bengelska\s+ordet\b/,
+  /\benglish\s+word\b/,
   /\bpå\s+engelska\b/,
   /\bsynonymt\s+med\b/
+];
+
+const EXPLICIT_TRANSLATION_PATTERNS = [
+  /\bengelska\s+ordet\b/,
+  /\benglish\s+word\b/,
+  /\bpå\s+engelska\b/,
+  /\bsynonymt\s+med\b/,
+  /\btranslated\s+as\b/,
+  /\bdefined\s+as\b/
 ];
 
 const WEIGHTS = {
@@ -220,13 +230,20 @@ function codeSwitchingCoherence(text, tokens) {
   }
 
   const crossLanguage = (nonEnglishGroups >= 2) || (nonEnglishGroups >= 1 && englishSignal >= 3);
+  const lower = text.toLowerCase();
+  const anchored = ANCHOR_PATTERNS.some((pattern) => pattern.test(lower));
+  const explicitTranslation = EXPLICIT_TRANSLATION_PATTERNS.some((pattern) => pattern.test(lower));
+  const quotedForeignToken = /['"][^'"]{2,20}['"]/.test(text);
+
   if (!crossLanguage) {
+    // Explicit translation/borrowing is valid code-switch management.
+    if (anchored && (explicitTranslation || quotedForeignToken)) {
+      return 0.85;
+    }
     // Neutral: single-language sample, dimension not exercised.
     return 0.5;
   }
 
-  const lower = text.toLowerCase();
-  const anchored = ANCHOR_PATTERNS.some((pattern) => pattern.test(lower));
   if (anchored) {
     return clamp(0.80 + Math.min(0.2, switchHits * 0.03));
   }

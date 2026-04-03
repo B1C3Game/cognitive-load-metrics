@@ -52,8 +52,18 @@ ANCHOR_PATTERNS = (
     r"\bdefined\s+as\b",
     r"\b(swedish|french|arabic)\s+means\b",
     r"\bengelska\s+ordet\b",
+    r"\benglish\s+word\b",
     r"\bpå\s+engelska\b",
     r"\bsynonymt\s+med\b",
+)
+
+EXPLICIT_TRANSLATION_PATTERNS = (
+    r"\bengelska\s+ordet\b",
+    r"\benglish\s+word\b",
+    r"\bpå\s+engelska\b",
+    r"\bsynonymt\s+med\b",
+    r"\btranslated\s+as\b",
+    r"\bdefined\s+as\b",
 )
 
 WEIGHTS = {
@@ -195,12 +205,19 @@ def code_switching_coherence(text: str, tokens: List[str]) -> float:
         non_english_groups += 1
 
     cross_language = (non_english_groups >= 2) or (non_english_groups >= 1 and english_signal >= 3)
+    lower = text.lower()
+    anchored = any(re.search(pattern, lower) for pattern in ANCHOR_PATTERNS)
+
+    explicit_translation = any(re.search(pattern, lower) for pattern in EXPLICIT_TRANSLATION_PATTERNS)
+    quoted_foreign_token = bool(re.search(r"['\"][^'\"]{2,20}['\"]", text))
+
     if not cross_language:
+        # Explicit translation/borrowing is valid code-switch management.
+        if anchored and (explicit_translation or quoted_foreign_token):
+            return 0.85
         # Neutral: single-language sample, dimension not exercised.
         return 0.5
 
-    lower = text.lower()
-    anchored = any(re.search(pattern, lower) for pattern in ANCHOR_PATTERNS)
     if anchored:
         return clamp(0.80 + min(0.2, switch_hits * 0.03))
     return clamp(0.40 - min(0.35, switch_hits * 0.05))
