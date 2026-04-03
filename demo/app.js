@@ -22,10 +22,23 @@ const SUBORDINATORS = new Set([
 ]);
 
 const PRONOUNS = new Set(["it", "this", "that", "they", "them", "he", "she", "these", "those"]);
-const LANG_HINTS_SV = new Set(["och", "att", "det", "som", "inte", "med", "for", "eller"]);
+const LANG_HINTS_SV = new Set([
+  "och", "att", "det", "som", "inte", "med", "for", "eller",
+  "men", "ibland", "byter", "sprak", "utan", "ankare",
+  "svenska", "svensk", "svenskt", "medskapande", "trygg"
+]);
 const LANG_HINTS_FR = new Set(["et", "de", "la", "le", "des", "avec", "pour"]);
 const LANG_HINTS_ARABIC_ROMANIZED = new Set(["yaani", "wallah", "inshallah", "habibi"]);
-const ANCHORS = ["in swedish", "in french", "in arabic", "translated", "means", "translation", "defined as"];
+const ANCHOR_PATTERNS = [
+  /\bin swedish\b/,
+  /\bin french\b/,
+  /\bin arabic\b/,
+  /\b(swedish|french|arabic)\s*:/,
+  /\btranslated\s+as\b/,
+  /\btranslation\b/,
+  /\bdefined\s+as\b/,
+  /\b(swedish|french|arabic)\s+means\b/
+];
 
 const WEIGHTS = {
   semantic_density: 0.25,
@@ -85,7 +98,8 @@ function splitSentences(text) {
 }
 
 function tokenize(text) {
-  return Array.from(text.toLowerCase().matchAll(/[a-z][a-z'-]*/g)).map((match) => match[0]);
+  // Unicode-aware tokenizer so Swedish diacritics and Arabic letters are preserved.
+  return Array.from(text.toLowerCase().matchAll(/[\p{L}][\p{L}'-]*/gu)).map((match) => match[0]);
 }
 
 const DENSITY_OVERLOAD_CONCEPTS = 18;
@@ -176,20 +190,22 @@ function codeSwitchingCoherence(text, tokens) {
 
   const svHits = tokens.filter((token) => LANG_HINTS_SV.has(token)).length;
   const frHits = tokens.filter((token) => LANG_HINTS_FR.has(token)).length;
-  const arHits = tokens.filter((token) => LANG_HINTS_ARABIC_ROMANIZED.has(token)).length;
-  const switchHits = svHits + frHits + arHits;
+  const arRomanizedHits = tokens.filter((token) => LANG_HINTS_ARABIC_ROMANIZED.has(token)).length;
+  const arScriptHits = (text.match(/[\u0600-\u06FF]+/g) || []).length;
+  const switchHits = svHits + frHits + arRomanizedHits + arScriptHits;
 
   if (switchHits === 0) {
-    return 1;
+    // Neutral score: no code-switching present, dimension not exercised.
+    return 0.5;
   }
 
   const lower = text.toLowerCase();
-  const anchored = ANCHORS.some((anchor) => lower.includes(anchor));
+  const anchored = ANCHOR_PATTERNS.some((pattern) => pattern.test(lower));
   if (anchored) {
-    return clamp(0.75 + Math.min(0.2, switchHits * 0.03));
+    return clamp(0.80 + Math.min(0.2, switchHits * 0.03));
   }
 
-  return clamp(0.55 - Math.min(0.35, switchHits * 0.04));
+  return clamp(0.40 - Math.min(0.35, switchHits * 0.05));
 }
 
 function workingMemoryClarity(sentences, tokens, syntacticClarity) {
@@ -250,7 +266,7 @@ function applyCascadePenalties(weightedScore, factors, failedCount) {
 
   penalized *= basePenalty;
 
-  if (factors.code_switching < COHERENCE_FAIL_THRESHOLD && factors.lexical_clarity < COHERENCE_FAIL_THRESHOLD) {
+  if (factors.code_switching < COHERENCE_FAIL_THRESHOLD && factors.code_switching !== 0.5 && factors.lexical_clarity < COHERENCE_FAIL_THRESHOLD) {
     penalized *= COHERENCE_PENALTY_MULTIPLIER;
     penalties.push({ name: "coherence_penalty", multiplier: COHERENCE_PENALTY_MULTIPLIER });
   }
@@ -296,6 +312,10 @@ function scoreText(text) {
   const thresholdStatus = Object.fromEntries(
     Object.entries(factors).map(([name, value]) => [name, value >= THRESHOLDS[name]])
   );
+  // Neutral code-switching (no switching observed) is not a failed dimension.
+  if (Math.abs(factors.code_switching - 0.5) < 1e-9) {
+    thresholdStatus.code_switching = true;
+  }
   const failedDimensions = Object.entries(thresholdStatus).filter(([, passed]) => !passed).map(([name]) => name);
   const cascadeResult = applyCascadePenalties(weighted, factors, failedDimensions.length);
   const score = Math.round(cascadeResult.penalized * 100);

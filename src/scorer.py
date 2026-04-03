@@ -29,13 +29,24 @@ SUBORDINATORS = {
 
 PRONOUNS = {"it", "this", "that", "they", "them", "he", "she", "these", "those"}
 
-LANG_HINTS_SV = {"och", "att", "det", "som", "inte", "med", "for", "eller"}
+LANG_HINTS_SV = {
+    "och", "att", "det", "som", "inte", "med", "for", "eller",
+    "men", "ibland", "byter", "sprak", "utan", "ankare",
+    "svenska", "svensk", "svenskt", "medskapande", "trygg"
+}
 LANG_HINTS_FR = {"et", "de", "la", "le", "des", "avec", "pour"}
 LANG_HINTS_ARABIC_ROMANIZED = {"yaani", "wallah", "inshallah", "habibi"}
 
-ANCHORS = {
-    "in swedish", "in french", "in arabic", "translated", "means", "translation", "defined as"
-}
+ANCHOR_PATTERNS = (
+    r"\bin swedish\b",
+    r"\bin french\b",
+    r"\bin arabic\b",
+    r"\b(swedish|french|arabic)\s*:",
+    r"\btranslated\s+as\b",
+    r"\btranslation\b",
+    r"\bdefined\s+as\b",
+    r"\b(swedish|french|arabic)\s+means\b",
+)
 
 WEIGHTS = {
     "semantic_density": 0.25,
@@ -75,7 +86,8 @@ def split_sentences(text: str) -> List[str]:
 
 
 def tokenize(text: str) -> List[str]:
-    return re.findall(r"[A-Za-z][A-Za-z'-]*", text.lower())
+    # Unicode-aware tokenizer so Swedish diacritics and Arabic letters are preserved.
+    return re.findall(r"[^\W\d_][^\W\d_'-]*", text.lower(), flags=re.UNICODE)
 
 
 # Above this many unique content words in one sentence, concept overload kicks in.
@@ -158,16 +170,18 @@ def code_switching_coherence(text: str, tokens: List[str]) -> float:
         return 0.0
     sv_hits = sum(1 for t in tokens if t in LANG_HINTS_SV)
     fr_hits = sum(1 for t in tokens if t in LANG_HINTS_FR)
-    ar_hits = sum(1 for t in tokens if t in LANG_HINTS_ARABIC_ROMANIZED)
-    switch_hits = sv_hits + fr_hits + ar_hits
+    ar_romanized_hits = sum(1 for t in tokens if t in LANG_HINTS_ARABIC_ROMANIZED)
+    ar_script_hits = len(re.findall(r"[\u0600-\u06FF]+", text))
+    switch_hits = sv_hits + fr_hits + ar_romanized_hits + ar_script_hits
     if switch_hits == 0:
-        return 1.0
+        # Neutral score: no code-switching present, dimension not exercised.
+        return 0.5
 
     lower = text.lower()
-    anchored = any(anchor in lower for anchor in ANCHORS)
+    anchored = any(re.search(pattern, lower) for pattern in ANCHOR_PATTERNS)
     if anchored:
-        return clamp(0.75 + min(0.2, switch_hits * 0.03))
-    return clamp(0.55 - min(0.35, switch_hits * 0.04))
+        return clamp(0.80 + min(0.2, switch_hits * 0.03))
+    return clamp(0.40 - min(0.35, switch_hits * 0.05))
 
 
 def working_memory_clarity(sentences: List[str], tokens: List[str], syntactic_clarity: float) -> float:
@@ -220,6 +234,7 @@ def apply_cascade_penalties(
 
     if (
         factors["code_switching"] < COHERENCE_FAIL_THRESHOLD
+        and factors["code_switching"] != 0.5
         and factors["lexical_clarity"] < COHERENCE_FAIL_THRESHOLD
     ):
         penalized *= COHERENCE_PENALTY_MULTIPLIER
@@ -261,11 +276,15 @@ class ScoreResult:
 
 
 def threshold_status_for(factors: Dict[str, float]) -> Dict[str, bool]:
-    return {name: factors[name] >= THRESHOLDS[name] for name in factors}
+    status = {name: factors[name] >= THRESHOLDS[name] for name in factors}
+    # Neutral code-switching (no switching observed) is not a failed dimension.
+    if abs(factors["code_switching"] - 0.5) < 1e-9:
+        status["code_switching"] = True
+    return status
 
 
 def bottleneck_for(factors: Dict[str, float]) -> str:
-    key = min(factors, key=factors.get)
+    key = min(factors, key=lambda name: factors[name])
     mapping = {
         "semantic_density": "semantic_density - increase concept precision per sentence",
         "syntactic_complexity": "syntactic_complexity - reduce nesting",
