@@ -22,7 +22,7 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 - Published to GitHub for collaboration and deployment
 
 ## Repository layout
-- **corpus/**: B1C3 philosophy baseline texts (49 markdown files)
+- **corpus/**: Bring your own corpus — place markdown files here as your baseline (not included; proprietary)
 - **src/**: Python source code
   - scorer.py: rule-based cognitive load scoring engine
   - generate_noise.py: synthetic noise generation with profiles
