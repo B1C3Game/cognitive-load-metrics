@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cognitive Load Metrics Demo</title>
+  <meta name="description" content="Interactive demo for B1C3 Cognitive Load Metrics. Score text, inspect factor breakdowns, and surface rewrite guidance in the browser.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <header class="shell hero">
+    <p class="eyebrow">Day 3 Demo</p>
+    <h1>Cognitive Load Metrics</h1>
+    <p class="lede">A live browser demo of the measurement framework. Paste text, score clarity, inspect the five dimensions, and surface the rewrite bottleneck instantly.</p>
+    <div class="hero-actions">
+      <a class="button primary" href="#demo">Try the scorer</a>
+      <a class="button secondary" href="https://github.com/B1C3Game/cognitive-load-metrics" target="_blank" rel="noreferrer">View GitHub repo</a>
+    </div>
+    <ul class="hero-points">
+      <li>Rule-based and explainable</li>
+      <li>Same five-factor logic as the Python scorer</li>
+      <li>Partner-ready without backend setup</li>
+    </ul>
+  </header>
+
+  <main class="shell layout" id="demo">
+    <section class="panel input-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Input</p>
+          <h2>Score any text</h2>
+        </div>
+        <div class="actions-inline">
+          <button class="chip" data-example="clear" type="button">Load clear example</button>
+          <button class="chip" data-example="noisy" type="button">Load noisy example</button>
+          <button class="chip" data-example="codeswitch" type="button">Load code-switch example</button>
+        </div>
+      </div>
+      <label class="sr-only" for="inputText">Text to analyze</label>
+      <textarea id="inputText" spellcheck="false">This guidance keeps one idea per sentence. It defines the technical term before using it. The reader always knows what changed and why it matters.</textarea>
+      <div class="input-actions">
+        <button id="scoreButton" class="button primary" type="button">Score text</button>
+        <button id="compareButton" class="button secondary" type="button">Compare clear vs noisy</button>
+      </div>
+      <p class="note">This demo is a measurement framework, not a trained model. It is the live artifact for partner conversations, not the final micro-LLM claim.</p>
+    </section>
+
+    <section class="panel score-panel">
+      <div class="panel-head compact">
+        <div>
+          <p class="eyebrow">Result</p>
+          <h2 id="scoreValue">88</h2>
+        </div>
+        <div class="result-meta">
+          <span id="ratingBadge" class="badge pass">Clear</span>
+          <span id="failedCount">0 failed dimensions</span>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <article class="summary-card">
+          <h3>Bottleneck</h3>
+          <p id="bottleneckText">lexical_clarity - replace jargon with common words</p>
+        </article>
+        <article class="summary-card">
+          <h3>Rewrite Focus</h3>
+          <p id="rewriteText">Replace abstract terms with concrete, common alternatives.</p>
+        </article>
+      </div>
+
+      <div class="factor-list" id="factorList"></div>
+    </section>
+
+    <section class="panel compare-panel">
+      <div class="panel-head compact">
+        <div>
+          <p class="eyebrow">Comparison</p>
+          <h2>Before / After signal</h2>
+        </div>
+      </div>
+      <div class="compare-grid">
+        <article class="compare-card">
+          <h3>Clear baseline</h3>
+          <p id="compareCleanScore" class="compare-score">88</p>
+          <p id="compareCleanLabel">Partner-safe wording with anchored transitions.</p>
+        </article>
+        <article class="compare-card accent-card">
+          <h3>Noisy variant</h3>
+          <p id="compareNoisyScore" class="compare-score">73</p>
+          <p id="compareNoisyLabel">Jargon, clause pressure, and context jumps increase load.</p>
+        </article>
+        <article class="compare-card delta-card">
+          <h3>Observed delta</h3>
+          <p id="compareDelta" class="compare-score">15</p>
+          <p id="compareNarrative">The scorer catches the degradation and points to the bottleneck driving it.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel narrative-panel">
+      <div class="panel-head compact">
+        <div>
+          <p class="eyebrow">Positioning</p>
+          <h2>Three buyer narratives</h2>
+        </div>
+      </div>
+      <div class="narrative-grid">
+        <article>
+          <h3>Validation</h3>
+          <p>Use the score as a quality gate. Show that the framework detects degradation without hand-wavy judgment.</p>
+        </article>
+        <article>
+          <h3>Improvement</h3>
+          <p>Use the bottleneck and failed dimensions to focus edits. The value is actionable diagnosis, not abstract critique.</p>
+        </article>
+        <article>
+          <h3>Audit</h3>
+          <p>Use threshold pass/fail status as an accessibility and governance view. The output is explicit and machine-readable.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

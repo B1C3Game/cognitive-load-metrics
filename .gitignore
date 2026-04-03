@@ -14,6 +14,8 @@ corpus/
 generated/
 
 # Evaluation artifacts (raw data, reproducible from src scripts)
+outputs/evaluation_report.*
+outputs/demo_story.txt
 outputs/realistic/evaluation_report.*
 outputs/improvement/evaluation_report.*
 outputs/aggressive/evaluation_report.*
@@ -33,3 +35,6 @@ outputs/*/demo_story.txt
 # Local environment
 .env
 .env.local
+
+# Local chat transcripts
+chat-*.md

@@ -30,6 +30,7 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 - ✅ Noise generation pipeline with three profiles (realistic/improvement/aggressive)
 - ✅ Batch evaluation framework producing JSON/CSV artifacts
 - ✅ Three partner-facing narratives with positioned messaging (validation/improvement/audit)
+- ✅ Interactive browser demo for live scoring and partner walkthroughs
 - Published to GitHub for collaboration and deployment
 
 ## Repository layout
@@ -39,6 +40,7 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
   - generate_noise.py: synthetic noise generation with profiles
   - evaluate_corpus.py: batch evaluation (clean vs noisy)
   - demo_story.py: partner narrative generator
+- **demo/**: static browser demo, ready for GitHub Pages deployment
 - **schema/**: scorer_output.schema.json (output contract)
 - **docs/**: SCORER_PSEUDOCODE.md (algorithm documentation)
 - **outputs/**: partner-facing narratives
@@ -58,6 +60,7 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 - ✅ Evaluation reports (JSON + CSV) with before/after analytics
 - ✅ Three partner-facing narratives with positioned messaging
 - ✅ Full corpus scoring (8 samples × 3 profiles = 24 evaluation records)
+- ✅ Browser demo that makes the scorer usable in a live partner conversation
 
 ## Scoring Framework
 
@@ -88,6 +91,13 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 	"rewrite_suggestion": "Split 3-clause sentence into 2 single-clause statements"
 }
 ```
+
+## Live demo
+
+- **Static browser demo:** `demo/index.html`
+- **GitHub Pages workflow:** `.github/workflows/pages.yml`
+
+The demo reproduces the rule-based scoring logic client-side so a partner can paste text, inspect the five-factor breakdown, and see rewrite guidance without running Python locally.
 
 ## Quick start
 Run the baseline scorer on a text snippet:
@@ -121,6 +131,8 @@ Generate a partner-facing demo narrative:
 ```sh
 python src/demo_story.py --report outputs/realistic/evaluation_report.json --out outputs/realistic/demo_story.txt --top 3
 ```
+
+Open the static demo locally by loading `demo/index.html` in a browser, or deploy it through GitHub Pages using the included workflow.
 
 ## Success criteria
 - ✅ Explainable outputs — five-factor breakdown with bottleneck and rewrite suggestion per text
