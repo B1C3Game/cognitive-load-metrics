@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://b1c3.dev/schemas/scorer_output.schema.json",
+  "title": "CognitiveLoadScorerOutput",
+  "type": "object",
+  "required": [
+    "score",
+    "factors",
+    "threshold_status",
+    "failed_dimensions",
+    "failed_count",
+    "bottleneck",
+    "rewrite_suggestion"
+  ],
+  "properties": {
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "factors": {
+      "type": "object",
+      "required": [
+        "semantic_density",
+        "syntactic_complexity",
+        "lexical_clarity",
+        "code_switching",
+        "working_memory"
+      ],
+      "properties": {
+        "semantic_density": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "syntactic_complexity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "lexical_clarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "code_switching": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "working_memory": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "threshold_status": {
+      "type": "object",
+      "required": [
+        "semantic_density",
+        "syntactic_complexity",
+        "lexical_clarity",
+        "code_switching",
+        "working_memory"
+      ],
+      "properties": {
+        "semantic_density": {
+          "type": "boolean"
+        },
+        "syntactic_complexity": {
+          "type": "boolean"
+        },
+        "lexical_clarity": {
+          "type": "boolean"
+        },
+        "code_switching": {
+          "type": "boolean"
+        },
+        "working_memory": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "failed_dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "semantic_density",
+          "syntactic_complexity",
+          "lexical_clarity",
+          "code_switching",
+          "working_memory"
+        ]
+      }
+    },
+    "failed_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "bottleneck": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rewrite_suggestion": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}
