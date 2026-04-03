@@ -108,6 +108,28 @@ def tokenize(text: str) -> List[str]:
     return re.findall(r"[^\W\d_][^\W\d_'-]*", text.lower(), flags=re.UNICODE)
 
 
+def is_noise_token(token: str) -> bool:
+    # Heuristic: random keyboard chunks often have very low vowel ratio,
+    # long consonant runs, or obvious repeated fragments.
+    t = token.lower()
+    if len(t) < 6:
+        return False
+
+    vowels = "aeiouyåäö"
+    vowel_count = sum(1 for ch in t if ch in vowels)
+    vowel_ratio = vowel_count / max(1, len(t))
+    if vowel_ratio < 0.20:
+        return True
+
+    if re.search(r"([^aeiouyåäö]{5,})", t):
+        return True
+
+    if re.search(r"(.{3,5})\1{1,}", t):
+        return True
+
+    return False
+
+
 # Above this many unique content words in one sentence, concept overload kicks in.
 _DENSITY_OVERLOAD_CONCEPTS = 18
 
@@ -120,7 +142,8 @@ def semantic_density(sentences: List[str]) -> float:
         tokens = tokenize(sentence)
         if not tokens:
             continue
-        content = [t for t in tokens if t not in STOPWORDS]
+        # Exclude obvious non-word noise so random strings do not inflate concept density.
+        content = [t for t in tokens if t not in STOPWORDS and not is_noise_token(t)]
         unique_concepts = len(set(content))
         ratio = unique_concepts / max(1, len(tokens))
 
@@ -177,10 +200,12 @@ def lexical_clarity(tokens: List[str]) -> float:
     common = sum(1 for t in tokens if t in COMMON_WORDS)
     jargon = sum(1 for t in tokens if t in JARGON_HINTS)
     long_words = sum(1 for t in tokens if len(t) >= 11)
+    noise_tokens = sum(1 for t in tokens if is_noise_token(t))
 
     common_ratio = common / len(tokens)
     jargon_pressure = (jargon + (0.5 * long_words)) / len(tokens)
-    return clamp(common_ratio - (0.6 * jargon_pressure) + 0.35)
+    noise_pressure = noise_tokens / len(tokens)
+    return clamp(common_ratio - (0.6 * jargon_pressure) - (0.9 * noise_pressure) + 0.35)
 
 
 def code_switching_coherence(text: str, tokens: List[str]) -> float:

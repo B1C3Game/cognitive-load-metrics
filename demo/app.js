@@ -119,6 +119,32 @@ function tokenize(text) {
   return Array.from(text.toLowerCase().matchAll(/[\p{L}][\p{L}'-]*/gu)).map((match) => match[0]);
 }
 
+function isNoiseToken(token) {
+  // Heuristic: random keyboard chunks often have low vowel ratio,
+  // long consonant runs, or repeated fragments.
+  const t = token.toLowerCase();
+  if (t.length < 6) {
+    return false;
+  }
+
+  const vowels = new Set(["a", "e", "i", "o", "u", "y", "å", "ä", "ö"]);
+  const vowelCount = Array.from(t).filter((ch) => vowels.has(ch)).length;
+  const vowelRatio = vowelCount / Math.max(1, t.length);
+  if (vowelRatio < 0.20) {
+    return true;
+  }
+
+  if (/([^aeiouyåäö]{5,})/i.test(t)) {
+    return true;
+  }
+
+  if (/(.{3,5})\1{1,}/i.test(t)) {
+    return true;
+  }
+
+  return false;
+}
+
 const DENSITY_OVERLOAD_CONCEPTS = 18;
 
 function semanticDensity(sentences) {
@@ -132,7 +158,8 @@ function semanticDensity(sentences) {
     if (!tokens.length) {
       continue;
     }
-    const content = tokens.filter((token) => !STOPWORDS.has(token));
+    // Exclude obvious non-word noise so random strings do not inflate concept density.
+    const content = tokens.filter((token) => !STOPWORDS.has(token) && !isNoiseToken(token));
     const uniqueConcepts = new Set(content).size;
     const ratio = uniqueConcepts / Math.max(1, tokens.length);
 
@@ -194,10 +221,12 @@ function lexicalClarity(tokens) {
   const common = tokens.filter((token) => COMMON_WORDS.has(token)).length;
   const jargon = tokens.filter((token) => JARGON_HINTS.has(token)).length;
   const longWords = tokens.filter((token) => token.length >= 11).length;
+  const noiseTokens = tokens.filter((token) => isNoiseToken(token)).length;
 
   const commonRatio = common / tokens.length;
   const jargonPressure = (jargon + (0.5 * longWords)) / tokens.length;
-  return clamp(commonRatio - (0.6 * jargonPressure) + 0.35);
+  const noisePressure = noiseTokens / tokens.length;
+  return clamp(commonRatio - (0.6 * jargonPressure) - (0.9 * noisePressure) + 0.35);
 }
 
 function codeSwitchingCoherence(text, tokens) {
