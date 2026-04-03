@@ -94,6 +94,7 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 
 ## Live demo
 
+- **Live URL:** https://b1c3game.github.io/cognitive-load-metrics/
 - **Static browser demo:** `demo/index.html`
 - **GitHub Pages workflow:** `.github/workflows/pages.yml`
 
