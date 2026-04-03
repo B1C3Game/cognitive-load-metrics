@@ -78,22 +78,37 @@ def tokenize(text: str) -> List[str]:
     return re.findall(r"[A-Za-z][A-Za-z'-]*", text.lower())
 
 
+# Above this many unique content words in one sentence, concept overload kicks in.
+_DENSITY_OVERLOAD_CONCEPTS = 18
+
+
 def semantic_density(sentences: List[str]) -> float:
     if not sentences:
         return 0.0
-    densities = []
+    scores = []
     for sentence in sentences:
         tokens = tokenize(sentence)
         if not tokens:
             continue
         content = [t for t in tokens if t not in STOPWORDS]
         unique_concepts = len(set(content))
-        densities.append(unique_concepts / max(1, len(tokens)))
-    if not densities:
+        ratio = unique_concepts / max(1, len(tokens))
+
+        # Base score: original linear normalization (0.15-0.65 range to 0-1).
+        sentence_score = clamp((ratio - 0.15) / 0.5)
+
+        # Concept overload penalty: too many distinct ideas in one sentence is a
+        # cognitive burden even when the ratio looks fine.
+        if unique_concepts > _DENSITY_OVERLOAD_CONCEPTS:
+            overload_penalty = min(0.75, (unique_concepts - _DENSITY_OVERLOAD_CONCEPTS) * 0.04)
+            sentence_score = max(0.0, sentence_score - overload_penalty)
+
+        scores.append(sentence_score)
+    if not scores:
         return 0.0
-    # Normalize to a practical range where 0.15..0.65 maps roughly to 0..1
-    avg = sum(densities) / len(densities)
-    return clamp((avg - 0.15) / 0.5)
+    avg = sum(scores) / len(scores)
+    worst = min(scores)
+    return clamp((0.70 * avg) + (0.30 * worst))
 
 
 def syntactic_complexity_clarity(sentences: List[str]) -> float:

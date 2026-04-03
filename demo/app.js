@@ -88,12 +88,14 @@ function tokenize(text) {
   return Array.from(text.toLowerCase().matchAll(/[a-z][a-z'-]*/g)).map((match) => match[0]);
 }
 
+const DENSITY_OVERLOAD_CONCEPTS = 18;
+
 function semanticDensity(sentences) {
   if (!sentences.length) {
     return 0;
   }
 
-  const densities = [];
+  const scores = [];
   for (const sentence of sentences) {
     const tokens = tokenize(sentence);
     if (!tokens.length) {
@@ -101,15 +103,28 @@ function semanticDensity(sentences) {
     }
     const content = tokens.filter((token) => !STOPWORDS.has(token));
     const uniqueConcepts = new Set(content).size;
-    densities.push(uniqueConcepts / Math.max(1, tokens.length));
+    const ratio = uniqueConcepts / Math.max(1, tokens.length);
+
+    // Base score: original linear normalization.
+    let sentenceScore = clamp((ratio - 0.15) / 0.5);
+
+    // Concept overload penalty: too many distinct ideas in one sentence is a burden
+    // even when the ratio looks fine.
+    if (uniqueConcepts > DENSITY_OVERLOAD_CONCEPTS) {
+      const overloadPenalty = Math.min(0.75, (uniqueConcepts - DENSITY_OVERLOAD_CONCEPTS) * 0.04);
+      sentenceScore = Math.max(0, sentenceScore - overloadPenalty);
+    }
+
+    scores.push(sentenceScore);
   }
 
-  if (!densities.length) {
+  if (!scores.length) {
     return 0;
   }
 
-  const average = densities.reduce((sum, value) => sum + value, 0) / densities.length;
-  return clamp((average - 0.15) / 0.5);
+  const avg = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+  const worst = Math.min(...scores);
+  return clamp((0.70 * avg) + (0.30 * worst));
 }
 
 function syntacticComplexityClarity(sentences) {
