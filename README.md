@@ -1,6 +1,6 @@
-# MLLM Cognitive load Metrics
+# Cognitive Load Metrics
 
-Focused workspace for a micro-LLM prototype that scores cognitive load in text using B1C3 constraints.
+A rule-based cognitive load measurement framework for text. Scores clarity, identifies bottlenecks, and generates rewrite suggestions — built as the foundation layer for a future micro-LLM.
 
 ## Objective
 Ship a narrow, defensible proof-of-concept that can:
@@ -8,8 +8,19 @@ Ship a narrow, defensible proof-of-concept that can:
 - explain why the score happened
 - suggest concrete rewrites
 
-## Why this matters
-The target is partner-facing, measurable value for accessibility and content clarity. This is a foundation layer for later auto-research workflows.
+## What this is (and isn't)
+This is a **rule-based measurement system**, not a trained model. It applies deterministic scoring logic across five dimensions to produce explainable, repeatable outputs.
+
+What it has that a micro-LLM needs:
+- Decision framework (five dimensions with thresholds)
+- Training signal (clean + noisy paired dataset, 24 evaluation records)
+- Evaluation protocol (before/after scoring with delta measurement)
+
+What's missing to call it a micro-LLM:
+- A trained model (fine-tuned adapter, small classifier, or embedding-based routing)
+- Inference code that uses learned weights instead of hardcoded rules
+
+**For partner demos**: the measurement system is the defensible artifact right now. Scored outputs are explainable and auditable without a trained model.
 
 ## Repository
 Published at: https://github.com/B1C3Game/cognitive-load-metrics
@@ -116,3 +127,10 @@ python src/demo_story.py --report outputs/realistic/evaluation_report.json --out
 - ✅ Repeatable scoring — deterministic output from same input across all runs
 - ✅ Measurable improvement signal — 3.75-point avg delta (realistic profile) as validation baseline
 - ✅ Defensible partner story — three positioned narratives with evidence artifacts
+
+## Planned features
+1. **Corpus embedding** — vectorize baseline texts to enable similarity-based scoring
+2. **Small classifier** — train a dimension-level classifier on clean/noisy pairs using learned weights
+3. **LoRA adapter** — fine-tune a small base model (e.g. Phi-3 mini) on the evaluation dataset
+4. **Inference pipeline** — replace rule-based scoring with model inference, keep same output schema
+5. **API layer** — expose scorer as a REST endpoint for integration into content pipelines
