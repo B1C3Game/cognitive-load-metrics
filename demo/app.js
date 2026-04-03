@@ -77,7 +77,11 @@ function clamp(value, low = 0, high = 1) {
 }
 
 function splitSentences(text) {
-  return text.trim().split(/(?<=[.!?])\s+|\n+/).map((part) => part.trim()).filter(Boolean);
+  // Normalize all whitespace/newlines to a single space first.
+  // Multi-line pasted text must not be fragmented into short pseudo-sentences
+  // that make a deeply nested single sentence look syntactically simple.
+  const normalized = text.trim().replace(/\s+/g, " ");
+  return normalized.split(/(?<=[.!?])\s+/).map((part) => part.trim()).filter(Boolean);
 }
 
 function tokenize(text) {
@@ -119,12 +123,14 @@ function syntacticComplexityClarity(sentences) {
     const commaCount = (sentence.match(/,/g) || []).length;
     const semiCount = (sentence.match(/;/g) || []).length;
     const colonCount = (sentence.match(/:/g) || []).length;
+    const emDashCount = (sentence.match(/[\u2014\u2013]/g) || []).length;
     const lengthPressure = Math.max(0, (tokens.length - 18) / 20);
     const rawComplexity =
       (0.60 * subCount) +
       (0.30 * commaCount) +
       (0.25 * semiCount) +
       (0.20 * colonCount) +
+      (0.25 * emDashCount) +
       (0.30 * lengthPressure);
     return clamp(1 - (rawComplexity / 4.8));
   });

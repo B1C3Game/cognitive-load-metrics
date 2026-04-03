@@ -66,7 +66,11 @@ def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
 
 
 def split_sentences(text: str) -> List[str]:
-    parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
+    # Normalize all whitespace/newlines to a single space first.
+    # This prevents multi-line pasted text from being fragmented into
+    # short pseudo-sentences that hide nesting complexity.
+    normalized = re.sub(r"\s+", " ", text.strip())
+    parts = re.split(r"(?<=[.!?])\s+", normalized)
     return [p.strip() for p in parts if p.strip()]
 
 
@@ -102,6 +106,7 @@ def syntactic_complexity_clarity(sentences: List[str]) -> float:
         comma_count = sentence.count(",")
         semi_count = sentence.count(";")
         colon_count = sentence.count(":")
+        emdash_count = sentence.count("\u2014") + sentence.count("\u2013")
         length_pressure = max(0, (len(tokens) - 18) / 20)
         # Heavier nesting pressure so one deeply nested sentence can tank clarity.
         raw_complexity = (
@@ -109,6 +114,7 @@ def syntactic_complexity_clarity(sentences: List[str]) -> float:
             + (0.30 * comma_count)
             + (0.25 * semi_count)
             + (0.20 * colon_count)
+            + (0.25 * emdash_count)
             + (0.30 * length_pressure)
         )
         # Convert complexity into clarity where higher is better.
