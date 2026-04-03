@@ -15,6 +15,11 @@ STOPWORDS = {
 COMMON_WORDS = STOPWORDS | {
     "clear", "text", "simple", "work", "help", "team", "user", "build", "score", "input",
     "output", "sentence", "word", "short", "long", "read", "understand", "meaning", "context"
+} | {
+    # Swedish high-frequency/common words to avoid English-only lexical bias.
+    "att", "vara", "ar", "är", "det", "som", "med", "och", "for", "för", "utan", "men",
+    "ordet", "engelska", "svenska", "synonymt", "ibland", "byter", "sprak", "språk", "den",
+    "har", "inte", "en", "ett", "i", "pa", "på", "av", "till"
 }
 
 JARGON_HINTS = {
@@ -46,6 +51,9 @@ ANCHOR_PATTERNS = (
     r"\btranslation\b",
     r"\bdefined\s+as\b",
     r"\b(swedish|french|arabic)\s+means\b",
+    r"\bengelska\s+ordet\b",
+    r"\bpå\s+engelska\b",
+    r"\bsynonymt\s+med\b",
 )
 
 WEIGHTS = {
@@ -174,7 +182,21 @@ def code_switching_coherence(text: str, tokens: List[str]) -> float:
     ar_script_hits = len(re.findall(r"[\u0600-\u06FF]+", text))
     switch_hits = sv_hits + fr_hits + ar_romanized_hits + ar_script_hits
     if switch_hits == 0:
-        # Neutral score: no code-switching present, dimension not exercised.
+        return 0.5
+
+    # Detect whether there is actual cross-language context, not just one-language usage.
+    english_signal = sum(1 for t in tokens if t in STOPWORDS)
+    non_english_groups = 0
+    if sv_hits > 0:
+        non_english_groups += 1
+    if fr_hits > 0:
+        non_english_groups += 1
+    if (ar_romanized_hits + ar_script_hits) > 0:
+        non_english_groups += 1
+
+    cross_language = (non_english_groups >= 2) or (non_english_groups >= 1 and english_signal >= 3)
+    if not cross_language:
+        # Neutral: single-language sample, dimension not exercised.
         return 0.5
 
     lower = text.lower()

@@ -8,7 +8,11 @@ const STOPWORDS = new Set([
 const COMMON_WORDS = new Set([
   ...STOPWORDS,
   "clear", "text", "simple", "work", "help", "team", "user", "build", "score", "input",
-  "output", "sentence", "word", "short", "long", "read", "understand", "meaning", "context"
+  "output", "sentence", "word", "short", "long", "read", "understand", "meaning", "context",
+  // Swedish high-frequency/common words to avoid English-only lexical bias.
+  "att", "vara", "ar", "är", "det", "som", "med", "och", "for", "för", "utan", "men",
+  "ordet", "engelska", "svenska", "synonymt", "ibland", "byter", "sprak", "språk", "den",
+  "har", "inte", "en", "ett", "i", "pa", "på", "av", "till"
 ]);
 
 const JARGON_HINTS = new Set([
@@ -37,7 +41,10 @@ const ANCHOR_PATTERNS = [
   /\btranslated\s+as\b/,
   /\btranslation\b/,
   /\bdefined\s+as\b/,
-  /\b(swedish|french|arabic)\s+means\b/
+  /\b(swedish|french|arabic)\s+means\b/,
+  /\bengelska\s+ordet\b/,
+  /\bpå\s+engelska\b/,
+  /\bsynonymt\s+med\b/
 ];
 
 const WEIGHTS = {
@@ -196,6 +203,25 @@ function codeSwitchingCoherence(text, tokens) {
 
   if (switchHits === 0) {
     // Neutral score: no code-switching present, dimension not exercised.
+    return 0.5;
+  }
+
+  // Detect whether there is actual cross-language context, not just one-language usage.
+  const englishSignal = tokens.filter((token) => STOPWORDS.has(token)).length;
+  let nonEnglishGroups = 0;
+  if (svHits > 0) {
+    nonEnglishGroups += 1;
+  }
+  if (frHits > 0) {
+    nonEnglishGroups += 1;
+  }
+  if ((arRomanizedHits + arScriptHits) > 0) {
+    nonEnglishGroups += 1;
+  }
+
+  const crossLanguage = (nonEnglishGroups >= 2) || (nonEnglishGroups >= 1 && englishSignal >= 3);
+  if (!crossLanguage) {
+    // Neutral: single-language sample, dimension not exercised.
     return 0.5;
   }
 
