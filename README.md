@@ -2,6 +2,12 @@
 
 A rule-based cognitive load measurement framework for text. Scores clarity, identifies bottlenecks, and generates rewrite suggestions — built as the foundation layer for a future micro-LLM.
 
+## Live demo
+
+- **Live URL:** https://b1c3game.github.io/cognitive-load-metrics/
+- **Static browser demo:** `demo/index.html`
+- **GitHub Pages workflow:** `.github/workflows/pages.yml`
+
 ## Objective
 Ship a narrow, defensible proof-of-concept that can:
 - score cognitive load
@@ -91,12 +97,6 @@ Published at: https://github.com/B1C3Game/cognitive-load-metrics
 	"rewrite_suggestion": "Split 3-clause sentence into 2 single-clause statements"
 }
 ```
-
-## Live demo
-
-- **Live URL:** https://b1c3game.github.io/cognitive-load-metrics/
-- **Static browser demo:** `demo/index.html`
-- **GitHub Pages workflow:** `.github/workflows/pages.yml`
 
 The demo reproduces the rule-based scoring logic client-side so a partner can paste text, inspect the five-factor breakdown, and see rewrite guidance without running Python locally.
 
