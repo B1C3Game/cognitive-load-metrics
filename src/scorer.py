@@ -2,7 +2,7 @@ import argparse
 import json
 import re
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 
 STOPWORDS = {
@@ -53,6 +53,13 @@ THRESHOLDS = {
     "working_memory": 0.75,
 }
 
+HARD_FAIL_THRESHOLD = 0.50
+COHERENCE_FAIL_THRESHOLD = 0.70
+MULTI_FAIL_CASCADE_MULTIPLIER = 0.55
+HARD_FAIL_MULTIPLIER = 0.70
+COHERENCE_PENALTY_MULTIPLIER = 0.80
+SYNTACTIC_MEMORY_CASCADE_MULTIPLIER = 0.85
+
 
 def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, value))
@@ -88,17 +95,29 @@ def semantic_density(sentences: List[str]) -> float:
 def syntactic_complexity_clarity(sentences: List[str]) -> float:
     if not sentences:
         return 0.0
-    complexity_scores = []
+    clarity_scores = []
     for sentence in sentences:
         tokens = tokenize(sentence)
         sub_count = sum(1 for t in tokens if t in SUBORDINATORS)
         comma_count = sentence.count(",")
         semi_count = sentence.count(";")
-        length_pressure = max(0, (len(tokens) - 22) / 30)
-        raw_complexity = (0.35 * sub_count) + (0.25 * comma_count) + (0.25 * semi_count) + (0.15 * length_pressure)
+        colon_count = sentence.count(":")
+        length_pressure = max(0, (len(tokens) - 18) / 20)
+        # Heavier nesting pressure so one deeply nested sentence can tank clarity.
+        raw_complexity = (
+            (0.60 * sub_count)
+            + (0.30 * comma_count)
+            + (0.25 * semi_count)
+            + (0.20 * colon_count)
+            + (0.30 * length_pressure)
+        )
         # Convert complexity into clarity where higher is better.
-        complexity_scores.append(clamp(1 - (raw_complexity / 3.0)))
-    return sum(complexity_scores) / len(complexity_scores)
+        clarity_scores.append(clamp(1 - (raw_complexity / 4.8)))
+
+    avg_clarity = sum(clarity_scores) / len(clarity_scores)
+    worst_sentence = min(clarity_scores)
+    # Blend mean and worst-case to avoid averaging away one catastrophic sentence.
+    return clamp((0.60 * avg_clarity) + (0.40 * worst_sentence))
 
 
 def lexical_clarity(tokens: List[str]) -> float:
@@ -130,7 +149,7 @@ def code_switching_coherence(text: str, tokens: List[str]) -> float:
     return clamp(0.55 - min(0.35, switch_hits * 0.04))
 
 
-def working_memory_clarity(sentences: List[str], tokens: List[str]) -> float:
+def working_memory_clarity(sentences: List[str], tokens: List[str], syntactic_clarity: float) -> float:
     if not sentences:
         return 0.0
     pronoun_count = sum(1 for t in tokens if t in PRONOUNS)
@@ -145,10 +164,54 @@ def working_memory_clarity(sentences: List[str], tokens: List[str]) -> float:
         clause_pressure += sentence.count(",") + sentence.count(";") + sentence.count(":")
 
     long_sentence_pressure = long_sentence_pressure / max(1, len(sentences))
-    clause_pressure = clause_pressure / max(1, len(sentences) * 4)
+    clause_pressure = clause_pressure / max(1, len(sentences) * 6)
 
-    raw_load = (0.45 * long_sentence_pressure) + (0.35 * clause_pressure) + (0.20 * pronoun_pressure)
-    return clamp(1 - raw_load)
+    raw_load = (0.40 * long_sentence_pressure) + (0.30 * clause_pressure) + (0.20 * pronoun_pressure)
+    clarity = clamp(1 - raw_load)
+    # Syntactic collapse increases memory burden, so apply a coupling penalty.
+    if syntactic_clarity < 0.70:
+        coupling = clamp(syntactic_clarity / 0.70, low=0.55, high=1.0)
+        clarity = clamp(clarity * coupling)
+    return clarity
+
+
+def apply_cascade_penalties(
+    weighted_score: float, factors: Dict[str, float], failed_count: int
+) -> Tuple[float, List[Dict[str, float | str]]]:
+    penalized = weighted_score
+    base_penalty = 1.0
+    penalties: List[Dict[str, float | str]] = []
+
+    if failed_count >= 2:
+        base_penalty = min(base_penalty, MULTI_FAIL_CASCADE_MULTIPLIER)
+
+    hard_fail_count = sum(1 for value in factors.values() if value < HARD_FAIL_THRESHOLD)
+    if hard_fail_count:
+        base_penalty = min(base_penalty, HARD_FAIL_MULTIPLIER)
+
+    if base_penalty < 1.0:
+        reason = "multi_fail_cascade" if failed_count >= 2 else "hard_fail"
+        if failed_count >= 2 and hard_fail_count:
+            reason = "multi_fail_cascade+hard_fail"
+        penalties.append({"name": reason, "multiplier": base_penalty})
+
+    penalized *= base_penalty
+
+    if (
+        factors["code_switching"] < COHERENCE_FAIL_THRESHOLD
+        and factors["lexical_clarity"] < COHERENCE_FAIL_THRESHOLD
+    ):
+        penalized *= COHERENCE_PENALTY_MULTIPLIER
+        penalties.append({"name": "coherence_penalty", "multiplier": COHERENCE_PENALTY_MULTIPLIER})
+
+    if (
+        factors["syntactic_complexity"] < THRESHOLDS["syntactic_complexity"]
+        and factors["working_memory"] < THRESHOLDS["working_memory"]
+    ):
+        penalized *= SYNTACTIC_MEMORY_CASCADE_MULTIPLIER
+        penalties.append({"name": "syntactic_memory_cascade", "multiplier": SYNTACTIC_MEMORY_CASCADE_MULTIPLIER})
+
+    return clamp(penalized), penalties
 
 
 @dataclass
@@ -158,6 +221,7 @@ class ScoreResult:
     threshold_status: Dict[str, bool]
     failed_dimensions: List[str]
     failed_count: int
+    penalties_applied: List[Dict[str, float | str]]
     bottleneck: str
     rewrite_suggestion: str
 
@@ -168,6 +232,7 @@ class ScoreResult:
             "threshold_status": self.threshold_status,
             "failed_dimensions": self.failed_dimensions,
             "failed_count": self.failed_count,
+            "penalties_applied": self.penalties_applied,
             "bottleneck": self.bottleneck,
             "rewrite_suggestion": self.rewrite_suggestion,
         }
@@ -206,18 +271,21 @@ def score_text(text: str) -> ScoreResult:
     sentences = split_sentences(text)
     tokens = tokenize(text)
 
+    syntactic_factor = syntactic_complexity_clarity(sentences)
+
     factors = {
         "semantic_density": semantic_density(sentences),
-        "syntactic_complexity": syntactic_complexity_clarity(sentences),
+        "syntactic_complexity": syntactic_factor,
         "lexical_clarity": lexical_clarity(tokens),
         "code_switching": code_switching_coherence(text, tokens),
-        "working_memory": working_memory_clarity(sentences, tokens),
+        "working_memory": working_memory_clarity(sentences, tokens, syntactic_factor),
     }
 
     weighted = sum(factors[name] * WEIGHTS[name] for name in factors)
-    total_score = int(round(clamp(weighted) * 100))
     status = threshold_status_for(factors)
     failed_dimensions = [name for name, passed in status.items() if not passed]
+    weighted, penalties_applied = apply_cascade_penalties(weighted, factors, len(failed_dimensions))
+    total_score = int(round(weighted * 100))
 
     bottleneck = bottleneck_for(factors)
     suggestion = rewrite_suggestion_for(bottleneck)
@@ -228,6 +296,7 @@ def score_text(text: str) -> ScoreResult:
         threshold_status=status,
         failed_dimensions=failed_dimensions,
         failed_count=len(failed_dimensions),
+        penalties_applied=penalties_applied,
         bottleneck=bottleneck,
         rewrite_suggestion=suggestion,
     )

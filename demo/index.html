@@ -49,6 +49,7 @@
         <button id="compareButton" class="button secondary" type="button">Compare clear vs noisy</button>
       </div>
       <p class="note">This demo is a measurement framework, not a trained model. It is the live artifact for partner conversations, not the final micro-LLM claim.</p>
+      <p class="note">Scoring uses cascade penalties: hard fails below 50, coherence penalty when lexical clarity + code-switching both fail, and syntactic-memory coupling when deep nesting increases memory load.</p>
     </section>
 
     <section class="panel score-panel">
@@ -71,6 +72,12 @@
         <article class="summary-card">
           <h3>Rewrite Focus</h3>
           <p id="rewriteText">Replace abstract terms with concrete, common alternatives.</p>
+        </article>
+        <article class="summary-card">
+          <h3>Penalties Applied</h3>
+          <ul id="penaltyList" class="penalty-list">
+            <li class="penalty-item">No cascade penalties applied.</li>
+          </ul>
         </article>
       </div>
 

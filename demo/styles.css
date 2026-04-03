@@ -344,3 +344,17 @@ a:focus {
     align-items: flex-start;
   }
 }
+
+.penalty-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-soft);
+}
+
+.penalty-item {
+  margin: 0 0 6px;
+}
+
+.penalty-item:last-child {
+  margin-bottom: 0;
+}

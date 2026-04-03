@@ -43,6 +43,13 @@ const THRESHOLDS = {
   working_memory: 0.75,
 };
 
+const HARD_FAIL_THRESHOLD = 0.50;
+const COHERENCE_FAIL_THRESHOLD = 0.70;
+const MULTI_FAIL_CASCADE_MULTIPLIER = 0.55;
+const HARD_FAIL_MULTIPLIER = 0.70;
+const COHERENCE_PENALTY_MULTIPLIER = 0.80;
+const SYNTACTIC_MEMORY_CASCADE_MULTIPLIER = 0.85;
+
 const FACTOR_EXPLANATIONS = {
   semantic_density: "One clear concept per sentence, not filler-heavy drift.",
   syntactic_complexity: "Lower clause pressure, clearer sentence structure.",
@@ -61,7 +68,7 @@ const BOTTLENECK_MAP = {
 
 const EXAMPLES = {
   clear: "This guidance keeps one idea per sentence. It defines the technical term before using it. The reader always knows what changed and why it matters.",
-  noisy: "This transformative orchestration framework leverages holistic synergy, which, although strategically aligned, introduces nested dependencies that the reader must reconstruct before the intended meaning stabilizes across the paragraph.",
+  noisy: "This plan sounds strategic and transformative, but key terms drift and meaning stays abstract; och den byter språk utan förklaring, so readers must infer intent.",
   codeswitch: "The system scores clarity, men ibland byter den språk utan ankare, which means the reader must infer the shift instead of being told what the switch does."
 };
 
@@ -111,12 +118,20 @@ function syntacticComplexityClarity(sentences) {
     const subCount = tokens.filter((token) => SUBORDINATORS.has(token)).length;
     const commaCount = (sentence.match(/,/g) || []).length;
     const semiCount = (sentence.match(/;/g) || []).length;
-    const lengthPressure = Math.max(0, (tokens.length - 22) / 30);
-    const rawComplexity = (0.35 * subCount) + (0.25 * commaCount) + (0.25 * semiCount) + (0.15 * lengthPressure);
-    return clamp(1 - (rawComplexity / 3));
+    const colonCount = (sentence.match(/:/g) || []).length;
+    const lengthPressure = Math.max(0, (tokens.length - 18) / 20);
+    const rawComplexity =
+      (0.60 * subCount) +
+      (0.30 * commaCount) +
+      (0.25 * semiCount) +
+      (0.20 * colonCount) +
+      (0.30 * lengthPressure);
+    return clamp(1 - (rawComplexity / 4.8));
   });
 
-  return scores.reduce((sum, value) => sum + value, 0) / scores.length;
+  const avgClarity = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+  const worstSentence = Math.min(...scores);
+  return clamp((0.60 * avgClarity) + (0.40 * worstSentence));
 }
 
 function lexicalClarity(tokens) {
@@ -156,7 +171,7 @@ function codeSwitchingCoherence(text, tokens) {
   return clamp(0.55 - Math.min(0.35, switchHits * 0.04));
 }
 
-function workingMemoryClarity(sentences, tokens) {
+function workingMemoryClarity(sentences, tokens, syntacticClarity) {
   if (!sentences.length) {
     return 0;
   }
@@ -175,10 +190,56 @@ function workingMemoryClarity(sentences, tokens) {
   }
 
   longSentencePressure = longSentencePressure / Math.max(1, sentences.length);
-  clausePressure = clausePressure / Math.max(1, sentences.length * 4);
+  clausePressure = clausePressure / Math.max(1, sentences.length * 6);
 
-  const rawLoad = (0.45 * longSentencePressure) + (0.35 * clausePressure) + (0.20 * pronounPressure);
-  return clamp(1 - rawLoad);
+  const rawLoad = (0.40 * longSentencePressure) + (0.30 * clausePressure) + (0.20 * pronounPressure);
+  let clarity = clamp(1 - rawLoad);
+
+  if (syntacticClarity < 0.70) {
+    const coupling = clamp(syntacticClarity / 0.70, 0.55, 1);
+    clarity = clamp(clarity * coupling);
+  }
+
+  return clarity;
+}
+
+function applyCascadePenalties(weightedScore, factors, failedCount) {
+  let penalized = weightedScore;
+  let basePenalty = 1;
+  const penalties = [];
+
+  if (failedCount >= 2) {
+    basePenalty = Math.min(basePenalty, MULTI_FAIL_CASCADE_MULTIPLIER);
+  }
+
+  const hardFailCount = Object.values(factors).filter((value) => value < HARD_FAIL_THRESHOLD).length;
+  if (hardFailCount > 0) {
+    basePenalty = Math.min(basePenalty, HARD_FAIL_MULTIPLIER);
+  }
+
+  if (basePenalty < 1) {
+    let reason = "hard_fail";
+    if (failedCount >= 2 && hardFailCount > 0) {
+      reason = "multi_fail_cascade+hard_fail";
+    } else if (failedCount >= 2) {
+      reason = "multi_fail_cascade";
+    }
+    penalties.push({ name: reason, multiplier: basePenalty });
+  }
+
+  penalized *= basePenalty;
+
+  if (factors.code_switching < COHERENCE_FAIL_THRESHOLD && factors.lexical_clarity < COHERENCE_FAIL_THRESHOLD) {
+    penalized *= COHERENCE_PENALTY_MULTIPLIER;
+    penalties.push({ name: "coherence_penalty", multiplier: COHERENCE_PENALTY_MULTIPLIER });
+  }
+
+  if (factors.syntactic_complexity < THRESHOLDS.syntactic_complexity && factors.working_memory < THRESHOLDS.working_memory) {
+    penalized *= SYNTACTIC_MEMORY_CASCADE_MULTIPLIER;
+    penalties.push({ name: "syntactic_memory_cascade", multiplier: SYNTACTIC_MEMORY_CASCADE_MULTIPLIER });
+  }
+
+  return { penalized: clamp(penalized), penalties };
 }
 
 function rewriteSuggestionFor(bottleneck) {
@@ -200,21 +261,23 @@ function rewriteSuggestionFor(bottleneck) {
 function scoreText(text) {
   const sentences = splitSentences(text);
   const tokens = tokenize(text);
+  const syntacticFactor = syntacticComplexityClarity(sentences);
 
   const factors = {
     semantic_density: semanticDensity(sentences),
-    syntactic_complexity: syntacticComplexityClarity(sentences),
+    syntactic_complexity: syntacticFactor,
     lexical_clarity: lexicalClarity(tokens),
     code_switching: codeSwitchingCoherence(text, tokens),
-    working_memory: workingMemoryClarity(sentences, tokens),
+    working_memory: workingMemoryClarity(sentences, tokens, syntacticFactor),
   };
 
   const weighted = Object.entries(factors).reduce((sum, [name, value]) => sum + (value * WEIGHTS[name]), 0);
-  const score = Math.round(clamp(weighted) * 100);
   const thresholdStatus = Object.fromEntries(
     Object.entries(factors).map(([name, value]) => [name, value >= THRESHOLDS[name]])
   );
   const failedDimensions = Object.entries(thresholdStatus).filter(([, passed]) => !passed).map(([name]) => name);
+  const cascadeResult = applyCascadePenalties(weighted, factors, failedDimensions.length);
+  const score = Math.round(cascadeResult.penalized * 100);
   const bottleneckKey = Object.entries(factors).sort((left, right) => left[1] - right[1])[0][0];
   const bottleneck = BOTTLENECK_MAP[bottleneckKey];
 
@@ -224,9 +287,34 @@ function scoreText(text) {
     threshold_status: thresholdStatus,
     failed_dimensions: failedDimensions,
     failed_count: failedDimensions.length,
+    penalties_applied: cascadeResult.penalties,
     bottleneck,
     rewrite_suggestion: rewriteSuggestionFor(bottleneck),
   };
+}
+
+function formatPenaltyName(name) {
+  return name.replaceAll("_", " ");
+}
+
+function renderPenalties(result) {
+  const penaltyList = document.querySelector("#penaltyList");
+  penaltyList.innerHTML = "";
+
+  if (!result.penalties_applied.length) {
+    const row = document.createElement("li");
+    row.className = "penalty-item";
+    row.textContent = "No cascade penalties applied.";
+    penaltyList.appendChild(row);
+    return;
+  }
+
+  result.penalties_applied.forEach((penalty) => {
+    const row = document.createElement("li");
+    row.className = "penalty-item";
+    row.textContent = `${formatPenaltyName(penalty.name)} x${penalty.multiplier.toFixed(2)}`;
+    penaltyList.appendChild(row);
+  });
 }
 
 function ratingFor(score) {
@@ -278,6 +366,7 @@ function updateMainResult(result) {
   badge.className = `badge ${rating.className}`;
 
   renderFactors(result);
+  renderPenalties(result);
 }
 
 function updateComparison(cleanText, noisyText) {
